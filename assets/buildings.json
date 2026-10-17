@@ -1,0 +1,9 @@
+[
+  {"id": "4",       "number": 4,  "name": "Building 4",  "lat": 26.3069, "lon": 50.1450, "mapX": 0.20, "mapY": 0.78},
+  {"id": "6",       "number": 6,  "name": "Building 6",  "lat": 26.3072, "lon": 50.1460, "mapX": 0.35, "mapY": 0.62},
+  {"id": "library", "number": 21, "name": "Library",     "lat": 26.3080, "lon": 50.1455, "mapX": 0.22, "mapY": 0.38},
+  {"id": "22",      "number": 22, "name": "Building 22", "lat": 26.3076, "lon": 50.1470, "mapX": 0.50, "mapY": 0.47},
+  {"id": "24",      "number": 24, "name": "Building 24", "lat": 26.3070, "lon": 50.1475, "mapX": 0.58, "mapY": 0.66},
+  {"id": "59",      "number": 59, "name": "Building 59", "lat": 26.3090, "lon": 50.1462, "mapX": 0.32, "mapY": 0.17},
+  {"id": "76",      "number": 76, "name": "Building 76", "lat": 26.3078, "lon": 50.1485, "mapX": 0.78, "mapY": 0.44}
+]
