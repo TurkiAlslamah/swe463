@@ -99,3 +99,14 @@ assets/
 
 Campus map data © OpenStreetMap contributors. The bundled `campus_map.png`
 is a placeholder until the exported OSM map is added.
+
+## AI disclosure
+
+We used AI as a assistant for this phase. It helped with:
+
+- Gather some possible requirements
+- Setting up the Flutter project structure and packages
+- Writing struture of the screens, shared widgets, models, services and providers. Thats helps us to understands how the codes work
+- help us to write this README and give us a phase2 templete 
+
+
