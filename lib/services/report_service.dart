@@ -1,9 +1,31 @@
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../models/report.dart';
+import 'local_report_store.dart';
 import 'supabase_service.dart';
 
-/// Reads and writes reports. Uses the Supabase `reports` table when it is
-/// configured, otherwise the sample data below (same items as the Figma frames).
+/// An error whose message can be shown to the user as it is.
+class ReportFailure implements Exception {
+  const ReportFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Repository for reports. Providers talk only to this class.
+///
+/// * Supabase keys provided -> `reports` table + `report-photos` bucket.
+/// * No keys (demo mode)    -> [LocalReportStore], a temporary memory store.
 class ReportService {
+  ReportService({LocalReportStore? local})
+      : _local = local ?? LocalReportStore();
+
+  final LocalReportStore _local;
+
+  /// Id of the local demo user (owner of some sample reports).
   static const String currentUserId = 'u1';
 
   static const List<String> categories = [
@@ -19,79 +41,69 @@ class ReportService {
   static String buildingLabel(String buildingId) =>
       buildingId == 'library' ? 'Library' : 'Building $buildingId';
 
-  final List<Report> _sample = _buildSample();
+  bool get _online => SupabaseService.isConfigured;
+  SupabaseClient get _db => SupabaseService.client;
 
   Future<List<Report>> fetchReports() async {
-    if (SupabaseService.isConfigured) {
-      final rows = await SupabaseService.client
-          .from('reports')
-          .select()
-          .order('occurred_at', ascending: false);
-      return rows.map((r) => Report.fromMap(r)).toList();
-    }
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    return List<Report>.from(_sample);
+    if (!_online) return _local.fetchAll();
+    final rows = await _db
+        .from('reports')
+        .select()
+        .order('occurred_at', ascending: false);
+    return rows.map(Report.fromMap).toList();
   }
 
-  Future<Report> addReport(Report report) async {
-    if (SupabaseService.isConfigured) {
-      await SupabaseService.client.from('reports').insert(report.toMap());
-    } else {
-      _sample.insert(0, report);
+  /// Uploads the photo (if any), saves the report and returns the stored
+  /// copy, which carries the real id given by the database.
+  Future<Report> addReport(Report report, {XFile? photo}) async {
+    if (!_online) return _local.add(report.copyWith(photoUrl: photo?.path));
+
+    final uid = _db.auth.currentUser?.id;
+    if (uid == null) {
+      throw const ReportFailure('Your session ended. Sign in again.');
     }
-    return report;
+    final photoUrl = photo == null ? null : await _uploadPhoto(uid, photo);
+    final row = report.toMap()
+      ..remove('id') // Postgres creates the id.
+      ..['owner_id'] = uid
+      ..['photo_url'] = photoUrl;
+    final saved = await _db.from('reports').insert(row).select().single();
+    return Report.fromMap(saved);
   }
 
   Future<void> updateStatus(String id, ReportStatus status) async {
-    if (SupabaseService.isConfigured) {
-      await SupabaseService.client
-          .from('reports')
-          .update({'status': status.name}).eq('id', id);
-      return;
+    if (!_online) return _local.updateStatus(id, status);
+    final rows = await _db
+        .from('reports')
+        .update({'status': status.name})
+        .eq('id', id)
+        .select();
+    if (rows.isEmpty) {
+      throw const ReportFailure('Only the owner can change this report.');
     }
-    final i = _sample.indexWhere((r) => r.id == id);
-    if (i != -1) _sample[i] = _sample[i].copyWith(status: status);
   }
 
-  static List<Report> _buildSample() {
-    final now = DateTime.now();
-    Report r(String id, ReportType type, String title, String desc,
-        String cat, String b, int daysAgo, String owner,
-        [ReportStatus status = ReportStatus.active]) {
-      return Report(
-        id: id,
-        type: type,
-        title: title,
-        description: desc,
-        category: cat,
-        buildingId: b,
-        occurredAt: now.subtract(Duration(days: daysAgo)),
-        status: status,
-        ownerId: owner,
-      );
-    }
+  Future<String> _uploadPhoto(String uid, XFile photo) async {
+    final bytes = await photo.readAsBytes();
+    final isPng = photo.name.toLowerCase().endsWith('.png');
+    final path =
+        '$uid/${DateTime.now().millisecondsSinceEpoch}.${isPng ? 'png' : 'jpg'}';
+    final bucket = _db.storage.from(SupabaseService.photoBucket);
+    await bucket.uploadBinary(
+      path,
+      bytes,
+      fileOptions: FileOptions(contentType: isPng ? 'image/png' : 'image/jpeg'),
+    );
+    return bucket.getPublicUrl(path);
+  }
 
-    const f = ReportType.found;
-    const l = ReportType.lost;
-    return [
-      r('r1', f, 'Black AirPods case', 'Found on a desk in room 120.',
-          'Electronics', '22', 0, 'u2'),
-      r('r2', f, 'Student ID card', 'Left at the front desk.', 'Cards & IDs',
-          'library', 1, 'u3'),
-      r('r3', f, 'Car keys with blue tag', 'Found near the parking gate.',
-          'Keys', '59', 2, 'u4'),
-      r('r4', f, 'Blue water bottle', 'Found in the cafeteria.', 'Bottles',
-          '24', 3, 'u1', ReportStatus.recovered),
-      r('r5', f, 'Black wallet', 'Found in the prayer room.', 'Wallets', '4',
-          4, 'u2'),
-      r('r6', f, 'Casio calculator', 'Found after the exam in room 101.',
-          'Electronics', '6', 0, 'u3'),
-      r('r7', l, 'Gray backpack', 'Gray backpack with a laptop inside.',
-          'Bags', '76', 0, 'u1'),
-      r('r8', l, 'Casio calculator', 'fx-991 with my name on the back.',
-          'Electronics', '6', 1, 'u1'),
-      r('r9', l, 'House keys', 'Three keys on a red ring.', 'Keys', '22', 5,
-          'u4'),
-    ];
+  /// Turns any error into a short message for a SnackBar or error state.
+  static String describe(Object error) {
+    if (error is ReportFailure) return error.message;
+    if (error is PostgrestException) return 'Server error: ${error.message}';
+    if (error is StorageException) {
+      return 'Photo upload failed: ${error.message}';
+    }
+    return 'No connection. Check your internet and try again.';
   }
 }

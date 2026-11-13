@@ -1,9 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../models/report.dart';
 import '../services/report_service.dart';
 
-/// Report lists, filters, loading and error state.
+/// Report lists, filters, loading/posting and error state.
 class ReportsProvider extends ChangeNotifier {
   ReportsProvider({ReportService? service})
       : _service = service ?? ReportService();
@@ -12,16 +13,28 @@ class ReportsProvider extends ChangeNotifier {
 
   List<Report> _reports = [];
   bool isLoading = false;
+  bool isPosting = false;
   String? error;
+  String _userId = ReportService.currentUserId;
 
   List<Report> get reports => _reports;
   List<Report> get found =>
       _reports.where((r) => r.type == ReportType.found).toList();
   List<Report> get lost =>
       _reports.where((r) => r.type == ReportType.lost).toList();
-  List<Report> get mine => _reports
-      .where((r) => r.ownerId == ReportService.currentUserId)
-      .toList();
+
+  /// Reports posted by the signed-in user (My Account).
+  List<Report> get mine => _reports.where((r) => r.ownerId == _userId).toList();
+
+  /// Called by main.dart whenever the signed-in user changes.
+  void setUser(String? userId) {
+    _userId = userId ?? '';
+    if (userId == null) {
+      _reports = [];
+      error = null;
+    }
+    notifyListeners();
+  }
 
   Report? byId(String id) {
     for (final r in _reports) {
@@ -37,16 +50,25 @@ class ReportsProvider extends ChangeNotifier {
     try {
       _reports = await _service.fetchReports();
     } catch (e) {
-      error = 'No connection';
+      error = ReportService.describe(e);
     }
     isLoading = false;
     notifyListeners();
   }
 
-  Future<void> addReport(Report report) async {
-    await _service.addReport(report);
-    _reports = [report, ..._reports.where((r) => r.id != report.id)];
+  /// Posts a report and returns the saved copy (with its real id).
+  /// Errors are re-thrown so the New Report screen can show them.
+  Future<Report> addReport(Report report, {XFile? photo}) async {
+    isPosting = true;
     notifyListeners();
+    try {
+      final saved = await _service.addReport(report, photo: photo);
+      _reports = [saved, ..._reports.where((r) => r.id != saved.id)];
+      return saved;
+    } finally {
+      isPosting = false;
+      notifyListeners();
+    }
   }
 
   Future<void> markRecovered(String id) async {
