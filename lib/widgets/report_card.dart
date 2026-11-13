@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/report.dart';
 import '../services/report_service.dart';
+import 'report_photo.dart';
 
 /// One report row, used on Home, Search, Saved Reports and My Account.
 class ReportCard extends StatelessWidget {
@@ -47,17 +48,18 @@ class ReportCard extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        leading: Container(
+        leading: ReportPhoto(
+          url: report.photoUrl,
           width: 48,
           height: 48,
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(Icons.image, color: scheme.onSurfaceVariant),
+          radius: 8,
         ),
-        title: Text(report.title,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(
+          report.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text(parts.join(' · ')),
         trailing: trailing,
       ),
