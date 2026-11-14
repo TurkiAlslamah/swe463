@@ -1,112 +1,159 @@
 # Laqait – KFUPM Campus Lost & Found
 
-SWE 463 · Term 261 · Group 05
+SWE 463 · Term 261 · Group 05 · Phase 3 (working prototype, tag `phase-3`)
 
 Laqait lets KFUPM students report found and lost items, browse and filter
-reports by type, building and date, and chat with the finder or owner
-without sharing phone numbers.
+reports by type, building and date, save reports, and mark their own
+reports as recovered. Chat and smart-match alerts come in Phase 4.
 
 | Member | ID |
 |---|---|
 | Naif Alenizi | 202154090 |
-| Rayn Alsaedi | 202169810 |
+| Rayan Alsaedi | 202169810 |
 | Faisal Alsulami | 202175830 |
 | Turki Alslamah | 202172030 |
 
 Figma: https://www.figma.com/design/0XBLZVZvW2cGIPAJPEDb13
 
-## Phase 2 starter app
-
-This is the starter project. All 12 screens from the Figma design exist,
-and the navigation follows the flow in Section 3 of the Phase 2 document
-(Sign In → bottom navigation with Home, Search, Report, Chats and Account).
-The screens run on local sample data. Supabase is connected in Phase 3.
-
-## Setup
+## Run the app
 
 Requirements: Flutter 3.22 or newer (Dart 3.4+).
 
 ```bash
 git clone https://github.com/TurkiAlslamah/swe463.git
 cd swe463
-
-# Generate the platform folders (android/, ios/, web/ ...) the first time.
-# Existing files in lib/ are not overwritten.
-flutter create . --project-name laqait --org sa.edu.kfupm
-
 flutter pub get
+```
+
+The app has two modes. Both start from a clean checkout.
+
+### 1. Supabase mode (real data)
+
+Create `env.json` in the project folder (it is git-ignored, never commit it).
+The values are in the Phase 3 report (section 9) or in your Supabase
+project under **Project Settings → API Keys**. `env.example.json` shows the
+format:
+
+```json
+{
+  "SUPABASE_URL": "https://YOUR-PROJECT-ID.supabase.co",
+  "SUPABASE_PUBLISHABLE_KEY": "YOUR-PUBLISHABLE-OR-ANON-KEY"
+}
+```
+
+```bash
+flutter run --dart-define-from-file=env.json
+```
+
+Sign in with the test account from the report, or create an account with
+any `@kfupm.edu.sa` email.
+
+### 2. Local demo mode (no keys)
+
+```bash
 flutter run
 ```
 
-Sign in with any `@kfupm.edu.sa` email and any password.
+Without keys the app uses a temporary in-memory store with sample reports.
+Any `@kfupm.edu.sa` email and any password signs in.
 
-To use Supabase later, pass the keys at run time (they are never committed):
+### Tests
 
 ```bash
-flutter run --dart-define=SUPABASE_URL=https://xxxx.supabase.co \
-            --dart-define=SUPABASE_ANON_KEY=your-anon-key
+flutter analyze
+flutter test
 ```
 
-### Photo picker permissions
+## Supabase setup (once, by the team)
 
-`image_picker` needs these entries after `flutter create`:
+1. Create a free project at https://supabase.com.
+2. **SQL Editor** → run `supabase/schema.sql` (tables, row-level security,
+   the `report-photos` bucket and the KFUPM-email check).
+3. **Authentication → Sign In / Providers → Email** → turn **off**
+   "Confirm email" so new accounts can sign in at once.
+4. Sign up `demo@kfupm.edu.sa` and `test@kfupm.edu.sa` in the app, then run
+   `supabase/seed.sql` for sample reports.
 
-- **iOS** – `ios/Runner/Info.plist`: `NSPhotoLibraryUsageDescription` and
-  `NSCameraUsageDescription`.
-- **Android** – nothing extra for the gallery on Android 13+.
+## Phase 3 features
+
+| # | Feature | Status |
+|---|---|---|
+| F1 | Report a found item (photo, item, category, building, date and time) | Implemented |
+| F2 | Report a lost item | Implemented |
+| F3 | Browse (Home tabs) and filter (Search by text, category, building, date) | Implemented |
+| F5 | Report status: owner marks a report as Recovered | Implemented |
+| F8 | Save reports (kept on the phone with shared_preferences) | Implemented |
+| F7 | Campus map pin (Map Picker + pin on Report Details) | In progress – placeholder map image, real OSM export in Phase 4 |
+| F4 | In-app chat | In progress – screens work on temporary sample data; Supabase Realtime in Phase 4 |
+| F6 | Smart match notifications | Not started – screen exists; database trigger in Phase 4 |
+
+**Completion: 5 of 8 essential features implemented (62.5%).**
+
+Main end-to-end flow: **New Report** → fill the form (validated) → **Post
+report** → photo uploaded to Supabase Storage and row saved in `reports` →
+"Report posted" → **View report** → the new report also appears on Home,
+Search and My Account.
 
 ## Packages
 
 | Package | Purpose |
 |---|---|
-| `supabase_flutter` | Database, storage, sign-in and realtime updates |
+| `supabase_flutter` | Auth, Postgres database and Storage for photos |
 | `provider` | Shared state (auth, reports, chats, notifications, saved reports) |
-| `go_router` | Routes and the bottom-navigation shell |
-| `image_picker` | Take or choose the item photo |
+| `go_router` | Routes, redirects after sign-in/out, bottom-navigation shell |
+| `image_picker` | Choose the item photo |
 | `shared_preferences` | Keep saved report IDs on the phone |
 | `intl` | Date and time formatting |
+
+All packages are from pub.dev (BSD-3-Clause or MIT licenses).
+
+## Data source
+
+- **Supabase** (`lib/services/report_service.dart`, `auth_service.dart`):
+  Auth for KFUPM email sign-in, the `reports` table, and the
+  `report-photos` Storage bucket. Schema: `supabase/schema.sql`.
+- **Temporary local store** (`lib/services/local_report_store.dart`): used
+  only when no keys are given. Only `ReportService` uses it, so it can be
+  removed in Phase 4 without touching any screen.
+- **shared_preferences**: saved report IDs (F8).
+- **App asset** `assets/buildings.json`: campus buildings and their map positions.
 
 ## Project structure
 
 ```
 lib/
-├── main.dart            app entry, providers, router
+├── main.dart            app entry, providers, reload on sign-in
 ├── app_router.dart      routes and bottom navigation
-├── models/              data classes
+├── models/              Report, Building, AppUser, ...
 ├── screens/             one file per screen (12 screens)
-├── widgets/             shared UI parts
-├── services/            Supabase calls (sample data for now)
-└── providers/           shared state
-assets/
-├── buildings.json       building list for the map picker
-└── campus_map.png       campus map image
+├── widgets/             ReportCard, ReportPhoto, ReportListSkeleton, ...
+├── services/            Supabase, auth, reports, buildings, local store
+├── providers/           shared state (Provider)
+└── utils/               form validators
+supabase/
+├── schema.sql           tables, policies, storage bucket
+└── seed.sql             optional demo reports
+test/                    unit and widget tests
 ```
 
-| Screen | File | Feature |
-|---|---|---|
-| 01 Sign In | `sign_in_screen.dart` | – |
-| 02 Sign Up | `sign_up_screen.dart` | – |
-| 03 Home | `home_screen.dart` | F3 |
-| 04 Search | `search_screen.dart` | F3 |
-| 05 New Report | `new_report_screen.dart` | F1, F2 |
-| 06 Map Picker | `map_picker_screen.dart` | F7 |
-| 07 Report Details | `report_details_screen.dart` | F4, F5, F7, F8 |
-| 08 Saved Reports | `saved_reports_screen.dart` | F8 |
-| 09 Chats | `chats_screen.dart` | F4 |
-| 10 Chat | `chat_screen.dart` | F4 |
-| 11 Notifications | `notifications_screen.dart` | F6 |
-| 12 My Account | `account_screen.dart` | F5, F8 |
+## Known issues
 
-Campus map data © OpenStreetMap contributors. The bundled `campus_map.png`
-is a placeholder until the exported OSM map is added.
+- Chat (F4) and notifications (F6) still use sample data in local mode;
+  in Supabase mode the notification list is empty until Phase 4.
+- `campus_map.png` is a placeholder image; building pins use approximate
+  positions from `buildings.json`.
+- Photos are chosen from the gallery only (no camera option yet).
+
+Campus map data © OpenStreetMap contributors.
 
 ## AI disclosure
 
-We used AI as a assistant for this phase. It helped with:
+We used an AI assistant (Claude) in Phase 2 and Phase 3. It helped us to:
 
-- Gather some possible requirements
-- Setting up the Flutter project structure and packages
-- Writing struture of the screens, shared widgets, models, services and providers. Thats helps us to understands how the codes work
-- help us to write this README and give us a phase2 templete 
+- plan how to split the Phase 3 work between the four members,
+- draft parts of the code (Supabase services, providers, screen states and
+  tests), which each member reviewed, ran, and can explain,
+- write this README.
 
-
+Every member tested their own part with `flutter analyze` and `flutter test`
+before committing it.
