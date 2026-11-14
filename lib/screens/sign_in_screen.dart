@@ -3,8 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import '../utils/validators.dart';
 
-/// Frame 01 - Sign In.
+/// Frame 01 - Sign In with a KFUPM email and password.
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
 
@@ -17,6 +18,8 @@ class _SignInScreenState extends State<SignInScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _obscure = true;
+  bool _loading = false;
+  bool _submitted = false;
 
   @override
   void dispose() {
@@ -26,9 +29,23 @@ class _SignInScreenState extends State<SignInScreen> {
   }
 
   Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _submitted = true);
     if (!_formKey.currentState!.validate()) return;
-    await context.read<AuthProvider>().signIn(_email.text, _password.text);
-    // The router redirects to /home once signed in.
+
+    setState(() => _loading = true);
+    final auth = context.read<AuthProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await auth.signIn(_email.text, _password.text);
+      // The router opens Home by itself once the user is signed in.
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.toString())));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -41,6 +58,9 @@ class _SignInScreenState extends State<SignInScreen> {
             padding: const EdgeInsets.all(24),
             child: Form(
               key: _formKey,
+              autovalidateMode: _submitted
+                  ? AutovalidateMode.onUserInteraction
+                  : AutovalidateMode.disabled,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -54,39 +74,58 @@ class _SignInScreenState extends State<SignInScreen> {
                   Text('Laqait',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: 4),
+                  Text('KFUPM campus lost & found',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
                   const SizedBox(height: 32),
                   TextFormField(
                     controller: _email,
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.email],
                     decoration: const InputDecoration(
                       labelText: 'Email',
+                      hintText: 'name@kfupm.edu.sa',
                       border: OutlineInputBorder(),
                     ),
-                    validator: (v) => AuthProvider.isKfupmEmail(v ?? '')
-                        ? null
-                        : 'Use your @kfupm.edu.sa email',
+                    validator: Validators.kfupmEmail,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _password,
                     obscureText: _obscure,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    onFieldSubmitted: (_) => _loading ? null : _submit(),
                     decoration: InputDecoration(
                       labelText: 'Password',
                       border: const OutlineInputBorder(),
                       suffixIcon: IconButton(
-                        icon: Icon(_obscure
-                            ? Icons.visibility
-                            : Icons.visibility_off),
+                        tooltip: _obscure ? 'Show password' : 'Hide password',
+                        icon: Icon(
+                            _obscure ? Icons.visibility : Icons.visibility_off),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    validator: (v) =>
-                        (v == null || v.isEmpty) ? 'Enter your password' : null,
+                    validator: Validators.password,
                   ),
                   const SizedBox(height: 24),
-                  FilledButton(onPressed: _submit, child: const Text('Sign in')),
+                  FilledButton(
+                    onPressed: _loading ? null : _submit,
+                    child: _loading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Sign in'),
+                  ),
                   TextButton(
-                    onPressed: () => context.push('/sign-up'),
+                    onPressed: _loading ? null : () => context.push('/sign-up'),
                     child: const Text('Create account'),
                   ),
                 ],
