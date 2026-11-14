@@ -7,8 +7,10 @@ import '../providers/notifications_provider.dart';
 import '../providers/reports_provider.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/report_card.dart';
+import '../widgets/report_list_skeleton.dart';
 
 /// Frame 03 - Home: recent Found and Lost reports in two tabs (F3).
+/// Shows the loading, empty, error and default states from the design.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
 
@@ -53,18 +55,22 @@ class _ReportList extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ReportsProvider>();
 
-    if (provider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+    // Loading (Frame 03 / Loading)
+    if (provider.isLoading && provider.reports.isEmpty) {
+      return const ReportListSkeleton();
     }
+
+    // Error (Frame 03 / No connection)
     if (provider.error != null) {
       return EmptyState(
         icon: Icons.cloud_off,
-        message: 'No connection',
+        message: provider.error!,
         actionLabel: 'Retry',
         onAction: provider.loadReports,
       );
     }
 
+    // Empty (Frame 03 / Empty)
     final items = type == ReportType.found ? provider.found : provider.lost;
     if (items.isEmpty) {
       return EmptyState(
@@ -77,9 +83,11 @@ class _ReportList extends StatelessWidget {
       );
     }
 
+    // Default: pull down to refresh.
     return RefreshIndicator(
       onRefresh: provider.loadReports,
       child: ListView.builder(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: items.length,
         itemBuilder: (context, i) => ReportCard(
